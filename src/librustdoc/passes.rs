@@ -168,8 +168,11 @@ impl<'a> fold::DocFolder for Stripper<'a> {
                 }
             }
 
-            // handled below
-            clean::ModuleItem(..) => {}
+            clean::ModuleItem(..) => {
+                if i.visibility != Some(ast::Public) {
+                    return None
+                }
+            }
 
             // trait impls for private items should be stripped
             clean::ImplItem(clean::Impl{

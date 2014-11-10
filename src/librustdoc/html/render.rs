@@ -188,7 +188,6 @@ pub struct Cache {
     stack: Vec<String>,
     parent_stack: Vec<ast::DefId>,
     search_index: Vec<IndexItem>,
-    privmod: bool,
     public_items: NodeSet,
 
     // In rare case where a structure is defined in one module but implemented
@@ -319,7 +318,6 @@ pub fn run(mut krate: clean::Crate, external_html: &ExternalHtml, dst: Path) -> 
         search_index: Vec::new(),
         extern_locations: HashMap::new(),
         primitive_locations: HashMap::new(),
-        privmod: false,
         public_items: public_items,
         orphan_methods: Vec::new(),
         traits: analysis.as_ref().map(|a| {
@@ -762,16 +760,6 @@ impl<'a> SourceCollector<'a> {
 
 impl DocFolder for Cache {
     fn fold_item(&mut self, item: clean::Item) -> Option<clean::Item> {
-        // If this is a private module, we don't want it in the search index.
-        let orig_privmod = match item.inner {
-            clean::ModuleItem(..) => {
-                let prev = self.privmod;
-                self.privmod = prev || item.visibility != Some(ast::Public);
-                prev
-            }
-            _ => self.privmod,
-        };
-
         // Register any generics to their corresponding string. This is used
         // when pretty-printing types
         match item.inner {
@@ -859,7 +847,7 @@ impl DocFolder for Cache {
                 };
 
                 match parent {
-                    (parent, Some(path)) if is_method || (!self.privmod && !hidden_field) => {
+                    (parent, Some(path)) if is_method || !hidden_field => {
                         self.search_index.push(IndexItem {
                             ty: shortty(&item),
                             name: s.to_string(),
@@ -868,7 +856,7 @@ impl DocFolder for Cache {
                             parent: parent,
                         });
                     }
-                    (Some(parent), None) if is_method || (!self.privmod && !hidden_field)=> {
+                    (Some(parent), None) if is_method || !hidden_field => {
                         if ast_util::is_local(parent) {
                             // We have a parent, but we don't know where they're
                             // defined yet. Wait for later to index this item.
@@ -893,7 +881,7 @@ impl DocFolder for Cache {
             clean::StructItem(..) | clean::EnumItem(..) |
             clean::TypedefItem(..) | clean::TraitItem(..) |
             clean::FunctionItem(..) | clean::ModuleItem(..) |
-            clean::ForeignFunctionItem(..) if !self.privmod => {
+            clean::ForeignFunctionItem(..) => {
                 // Reexported items mean that the same id can show up twice
                 // in the rustdoc ast that we're looking at. We know,
                 // however, that a reexported item doesn't show up in the
@@ -910,7 +898,7 @@ impl DocFolder for Cache {
             }
             // link variants to their parent enum because pages aren't emitted
             // for each variant
-            clean::VariantItem(..) if !self.privmod => {
+            clean::VariantItem(..) => {
                 let mut stack = self.stack.clone();
                 stack.pop();
                 self.paths.insert(item.def_id, (stack, item_type::Enum));
@@ -1022,7 +1010,6 @@ impl DocFolder for Cache {
 
         if pushed { self.stack.pop().unwrap(); }
         if parent_pushed { self.parent_stack.pop().unwrap(); }
-        self.privmod = orig_privmod;
         return ret;
     }
 }
@@ -1191,7 +1178,7 @@ impl Context {
         // these modules are recursed into, but not rendered normally (a
         // flag on the context).
         if !self.render_redirect_pages {
-            self.render_redirect_pages = ignore_private_item(&item);
+            self.render_redirect_pages = ignore_empty_item(&item);
         }
 
         match item.inner {
@@ -1442,7 +1429,7 @@ fn item_module(w: &mut fmt::Formatter, cx: &Context,
     try!(document(w, item));
 
     let mut indices = range(0, items.len()).filter(|i| {
-        !ignore_private_item(&items[*i])
+        !ignore_empty_item(&items[*i])
     }).collect::<Vec<uint>>();
 
     fn cmp(i1: &clean::Item, i2: &clean::Item, idx1: uint, idx2: uint) -> Ordering {
@@ -2159,7 +2146,7 @@ impl<'a> fmt::Show for Sidebar<'a> {
 fn build_sidebar(m: &clean::Module) -> HashMap<String, Vec<String>> {
     let mut map = HashMap::new();
     for item in m.items.iter() {
-        if ignore_private_item(item) { continue }
+        if ignore_empty_item(item) { continue }
 
         let short = shortty(item).to_static_str();
         let myname = match item.name {
@@ -2213,11 +2200,10 @@ fn item_primitive(w: &mut fmt::Formatter,
     render_methods(w, it)
 }
 
-fn ignore_private_item(it: &clean::Item) -> bool {
+fn ignore_empty_item(it: &clean::Item) -> bool {
     match it.inner {
         clean::ModuleItem(ref m) => {
-            (m.items.len() == 0 && it.doc_value().is_none()) ||
-               it.visibility != Some(ast::Public)
+            (m.items.len() == 0 && it.doc_value().is_none())
         }
         clean::PrimitiveItem(..) => it.visibility != Some(ast::Public),
         _ => false,

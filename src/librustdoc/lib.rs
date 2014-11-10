@@ -114,6 +114,8 @@ pub fn opts() -> Vec<getopts::OptGroup> {
         optmulti("", "plugins", "space separated list of plugins to also load",
                  "PLUGINS"),
         optflag("", "no-defaults", "don't run the default passes"),
+        optflag("a", "all-modules", "Include documentation from all modules, including those not \
+                                     visible externally"),
         optflag("", "test", "run code examples as tests"),
         optmulti("", "test-args", "arguments to pass to the test runner",
                  "ARGS"),
@@ -206,6 +208,7 @@ pub fn main_args(args: &[String]) -> int {
 
     let output = matches.opt_str("o").map(|s| Path::new(s));
     let cfgs = matches.opt_strs("cfg");
+    let inc_priv = matches.opt_present("a") || matches.opt_present("all-modules");
 
     let external_html = match ExternalHtml::load(
             matches.opt_strs("html-in-header").as_slice(),
@@ -241,7 +244,8 @@ pub fn main_args(args: &[String]) -> int {
     let started = time::precise_time_ns();
     match matches.opt_str("w").as_ref().map(|s| s.as_slice()) {
         Some("html") | None => {
-            match html::render::run(krate, &external_html, output.unwrap_or(Path::new("doc"))) {
+            match html::render::run(krate, &external_html, output.unwrap_or(Path::new("doc")),
+                                    inc_priv) {
                 Ok(()) => {}
                 Err(e) => panic!("failed to generate documentation: {}", e),
             }

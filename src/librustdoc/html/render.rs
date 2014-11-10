@@ -100,6 +100,10 @@ pub struct Context {
     /// real location of an item. This is used to allow external links to
     /// publicly reused items to redirect to the right location.
     pub render_redirect_pages: bool,
+    /// A flag, which when turned on, will include the documentation of all
+    /// referenced modules in the crate, even those that are not visible outside
+    /// the crate.
+    pub include_priv: bool,
 }
 
 /// Indicates where an external crate can be found.
@@ -235,9 +239,13 @@ local_data_key!(pub cache_key: Arc<Cache>)
 local_data_key!(pub current_location_key: Vec<String> )
 
 /// Generates the documentation for `crate` into the directory `dst`
-pub fn run(mut krate: clean::Crate, external_html: &ExternalHtml, dst: Path) -> io::IoResult<()> {
+pub fn run(mut krate: clean::Crate,
+           external_html: &ExternalHtml,
+           dst: Path,
+           privs: bool) -> io::IoResult<()> {
     let mut cx = Context {
         dst: dst,
+        include_priv: privs,
         current: Vec::new(),
         root_path: String::new(),
         sidebar: HashMap::new(),
@@ -1193,7 +1201,7 @@ impl Context {
         // these modules are recursed into, but not rendered normally (a
         // flag on the context).
         if !self.render_redirect_pages {
-            self.render_redirect_pages = ignore_private_item(&item);
+            self.render_redirect_pages = self.ignore_private_item(&item);
         }
 
         match item.inner {
@@ -1212,7 +1220,7 @@ impl Context {
                         clean::ModuleItem(m) => m,
                         _ => unreachable!()
                     };
-                    this.sidebar = build_sidebar(&m);
+                    this.sidebar = this.build_sidebar(&m);
                     for item in m.items.into_iter() {
                         f(this,item);
                     }
@@ -1229,6 +1237,40 @@ impl Context {
             }
 
             _ => Ok(())
+        }
+    }
+
+    fn build_sidebar(&self, m: &clean::Module) -> HashMap<String, Vec<String>> {
+        let mut map = HashMap::new();
+        for item in m.items.iter() {
+            if self.ignore_private_item(item) { continue }
+
+            let short = shortty(item).to_static_str();
+            let myname = match item.name {
+                None => continue,
+                Some(ref s) => s.to_string(),
+            };
+            let v = match map.entry(short.to_string()) {
+                Vacant(entry) => entry.set(Vec::with_capacity(1)),
+                Occupied(entry) => entry.into_mut(),
+            };
+            v.push(myname);
+        }
+
+        for (_, items) in map.iter_mut() {
+            items.as_mut_slice().sort();
+        }
+        return map;
+    }
+
+    fn ignore_private_item(&self, it: &clean::Item) -> bool {
+        match it.inner {
+            clean::ModuleItem(ref m) => {
+                (m.items.len() == 0 && it.doc_value().is_none()) ||
+                (!self.include_priv && it.visibility != Some(ast::Public))
+            }
+            clean::PrimitiveItem(..) => it.visibility != Some(ast::Public),
+            _ => false,
         }
     }
 }
@@ -1444,7 +1486,7 @@ fn item_module(w: &mut fmt::Formatter, cx: &Context,
     try!(document(w, item));
 
     let mut indices = range(0, items.len()).filter(|i| {
-        !ignore_private_item(&items[*i])
+        !cx.ignore_private_item(&items[*i])
     }).collect::<Vec<uint>>();
 
     fn cmp(i1: &clean::Item, i2: &clean::Item, idx1: uint, idx2: uint) -> Ordering {
@@ -2158,29 +2200,6 @@ impl<'a> fmt::Show for Sidebar<'a> {
     }
 }
 
-fn build_sidebar(m: &clean::Module) -> HashMap<String, Vec<String>> {
-    let mut map = HashMap::new();
-    for item in m.items.iter() {
-        if ignore_private_item(item) { continue }
-
-        let short = shortty(item).to_static_str();
-        let myname = match item.name {
-            None => continue,
-            Some(ref s) => s.to_string(),
-        };
-        let v = match map.entry(short.to_string()) {
-            Vacant(entry) => entry.set(Vec::with_capacity(1)),
-            Occupied(entry) => entry.into_mut(),
-        };
-        v.push(myname);
-    }
-
-    for (_, items) in map.iter_mut() {
-        items.as_mut_slice().sort();
-    }
-    return map;
-}
-
 impl<'a> fmt::Show for Source<'a> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         let Source(s) = *self;
@@ -2213,17 +2232,6 @@ fn item_primitive(w: &mut fmt::Formatter,
                   _p: &clean::PrimitiveType) -> fmt::Result {
     try!(document(w, it));
     render_methods(w, it)
-}
-
-fn ignore_private_item(it: &clean::Item) -> bool {
-    match it.inner {
-        clean::ModuleItem(ref m) => {
-            (m.items.len() == 0 && it.doc_value().is_none()) ||
-               it.visibility != Some(ast::Public)
-        }
-        clean::PrimitiveItem(..) => it.visibility != Some(ast::Public),
-        _ => false,
-    }
 }
 
 fn get_basic_keywords() -> &'static str {

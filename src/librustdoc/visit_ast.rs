@@ -158,9 +158,6 @@ impl<'a, 'tcx> RustdocVisitor<'a, 'tcx> {
     }
 
     pub fn visit_view_item(&mut self, item: &ast::ViewItem, om: &mut Module) {
-        if item.vis != ast::Public {
-            return om.view_items.push(item.clone());
-        }
         let please_inline = item.attrs.iter().any(|item| {
             match item.meta_item_list() {
                 Some(list) => {

@@ -1193,7 +1193,7 @@ impl Context {
         // these modules are recursed into, but not rendered normally (a
         // flag on the context).
         if !self.render_redirect_pages {
-            self.render_redirect_pages = ignore_private_item(&item);
+            self.render_redirect_pages = ignore_empty_item(&item);
         }
 
         match item.inner {
@@ -1444,7 +1444,7 @@ fn item_module(w: &mut fmt::Formatter, cx: &Context,
     try!(document(w, item));
 
     let mut indices = range(0, items.len()).filter(|i| {
-        !ignore_private_item(&items[*i])
+        !ignore_empty_item(&items[*i])
     }).collect::<Vec<uint>>();
 
     fn cmp(i1: &clean::Item, i2: &clean::Item, idx1: uint, idx2: uint) -> Ordering {
@@ -2161,7 +2161,7 @@ impl<'a> fmt::Show for Sidebar<'a> {
 fn build_sidebar(m: &clean::Module) -> HashMap<String, Vec<String>> {
     let mut map = HashMap::new();
     for item in m.items.iter() {
-        if ignore_private_item(item) { continue }
+        if ignore_empty_item(item) { continue }
 
         let short = shortty(item).to_static_str();
         let myname = match item.name {
@@ -2215,11 +2215,10 @@ fn item_primitive(w: &mut fmt::Formatter,
     render_methods(w, it)
 }
 
-fn ignore_private_item(it: &clean::Item) -> bool {
+fn ignore_empty_item(it: &clean::Item) -> bool {
     match it.inner {
         clean::ModuleItem(ref m) => {
-            (m.items.len() == 0 && it.doc_value().is_none()) ||
-               it.visibility != Some(ast::Public)
+            (m.items.len() == 0 && it.doc_value().is_none())
         }
         clean::PrimitiveItem(..) => it.visibility != Some(ast::Public),
         _ => false,

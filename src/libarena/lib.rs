@@ -22,25 +22,31 @@
 #![crate_name = "arena"]
 #![experimental]
 #![crate_type = "rlib"]
-#![crate_type = "dylib"]
 #![doc(html_logo_url = "http://www.rust-lang.org/logos/rust-logo-128x128-blk-v2.png",
        html_favicon_url = "http://www.rust-lang.org/favicon.ico",
        html_root_url = "http://doc.rust-lang.org/nightly/")]
 
-#![feature(unsafe_destructor)]
+#![no_std]
+#![feature(unsafe_destructor, phase, globs)]
 #![allow(missing_docs)]
 
+#[phase(plugin, link)] extern crate core;
 extern crate alloc;
+extern crate collections;
 
-use std::cell::{Cell, RefCell};
-use std::cmp;
-use std::intrinsics::{TyDesc, get_tydesc};
-use std::intrinsics;
-use std::mem;
-use std::num::{Int, UnsignedInt};
-use std::ptr;
-use std::rc::Rc;
-use std::rt::heap::{allocate, deallocate};
+#[cfg(test)] #[phase(plugin, link)] extern crate std;
+
+use core::prelude::*;
+
+use alloc::heap::{allocate, deallocate};
+use alloc::rc::Rc;
+use collections::Vec;
+use core::cell::{Cell, RefCell};
+use core::cmp;
+use core::intrinsics::{TyDesc, get_tydesc, mod};
+use core::mem;
+use core::num::{Int, UnsignedInt};
+use core::ptr;
 
 // The way arena uses arrays is really deeply awful. The arrays are
 // allocated, and have capacities reserved, but the fill for the array
@@ -504,11 +510,19 @@ impl<T> Drop for TypedArena<T> {
     }
 }
 
+#[cfg(not(test))]
+#[doc(hidden)]
+mod std {
+    pub use core::clone;
+    pub use core::cmp;
+}
+
 #[cfg(test)]
 mod tests {
     extern crate test;
     use self::test::Bencher;
     use super::{Arena, TypedArena};
+    use std::prelude::*;
 
     #[allow(dead_code)]
     struct Point {

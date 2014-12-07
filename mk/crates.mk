@@ -79,7 +79,7 @@ DEPS_rustc_back := std syntax rustc_llvm flate log libc
 DEPS_rustdoc := rustc rustc_driver native:hoedown serialize getopts \
                 test time
 DEPS_flate := std native:miniz
-DEPS_arena := std
+DEPS_arena := alloc collections core
 DEPS_graphviz := std
 DEPS_glob := std
 DEPS_serialize := std log
@@ -106,6 +106,7 @@ TOOL_SOURCE_rustc := $(S)src/driver/driver.rs
 ONLY_RLIB_core := 1
 ONLY_RLIB_libc := 1
 ONLY_RLIB_alloc := 1
+ONLY_RLIB_arena := 1
 ONLY_RLIB_rand := 1
 ONLY_RLIB_collections := 1
 ONLY_RLIB_unicode := 1
